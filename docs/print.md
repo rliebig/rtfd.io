@@ -35,7 +35,7 @@ Note that Qiling `verbose` property may be configured dynamically throughout the
 
 ### ql.filter
 
-Qiling log entires may be filteres using a regular expression. That may help filtering excessive logs and focusing on what matters.
+Qiling log entires may be filtered using a regular expression. That may help filtering excessive logs and focusing on what matters.
 
 ```python
 from qiling import Qiling

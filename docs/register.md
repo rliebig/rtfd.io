@@ -1,89 +1,95 @@
 ---
-title: Register
+title: Architectural Registers
 ---
 
-Reference: qiling/arch/register.py
+Architectural registers may be accessed through the `ql.arch.regs` object as described below. For more info please refer to [qiling/arch/register.py](https://github.com/qilingframework/qiling/blob/master/qiling/arch/register.py)
+
+Registers may be denoted either by their architectural names (e.g. `'eax'` in x86, `'r0'` in ARM, etc.) or by their corresponding Unicorn enumeration value (e.g. `UC_X86_REG_EAX`)
 
 ### Read
+There are two equivalent methods to read architectural registers: using the `read` method, or access them as properties. Though both may be use interchangebly, it is recommended to maintain consistency and pick one for the course of the emulation program.
 
-- Reading from string "eax"
+#### Using the read method
+The read method has a single argument to indicate the register to be read. The argument may be either the register architectural name (e.g. `'eax'`) or Unicorn enumeartion constant (e.g. `UC_X86_REG_EAX`).
 
+The following are identical in functionality:
 ```python
-ql.arch.regs.read("EAX")
+value = ql.arch.regs.read('eax')           # reading eax using register architectural name
+value = ql.arch.regs.read(UC_X86_REG_EAX)  # reading eax using Unicorn enumeration constant
 ```
 
-- Reading from Unicorn Engine const
-
+#### Accessing register as a property
 ```python
-ql.arch.regs.read(UC_X86_REG_EAX)
+value = ql.arch.regs.eax
 ```
-
-- Reading eax
-
-```python
-eax = ql.arch.regs.eax
-```
-
 
 ### Write
+There are two equivalent methods to write architectural registers: using the `write` method, or access them as properties. Though both may be use interchangebly, it is recommended to maintain consistency and pick one for the course of the emulation program.
 
-- Writing 0xFF to "eax"
+#### Using the write method
+The write method has two arguments to indicate the register and value to write. The argument may be either the register architectural name (e.g. `'ecx'`) or Unicorn enumeartion constant (e.g. `UC_X86_REG_ECX`).
 
+The following are identical in functionality:
 ```python
-ql.arch.regs.write("EAX", 0xFF)
+value = 0xdeadface
+
+ql.arch.regs.write('ecx', value)           # modifying ecx using register architectural name
+ql.arch.regs.write(UC_X86_REG_ECX, value)  # modifying ecx using Unicorn enumeration constant
 ```
 
-- Writing 0xFF to eax, via Unicorn Engine const
-
+#### Accessing register as a property
 ```python
-ql.arch.regs.write(UC_X86_REG_EAX, 0xFF)
+ql.arch.regs.ecx = 0xdeadface
 ```
 
-- Writing 0xFF to eax
-
+This access method has an advantage as it enables more readable code when manipulating a register value, e.g.:
 ```python
-ql.arch.regs.eax =  0xFF
+ql.arch.regs.eflags |= (0b1 << 6)  # set the zero flag
 ```
 
-
-### Cross architecture registers
-
-- This is for pc and sp only.
+### Generic aliases
+To allow code to be generic across multiple architectures, a few common registers may be accessed by their generic aliases:
 
 ```python
-ql.arch.regs.arch_pc
-ql.arch.regs.arch_sp
+pc = ql.arch.regs.arch_pc  # read the architectural program counter ('eip' on x86, 'pc' on ARM, etc.)
+sp = ql.arch.regs.arch_sp  # read the architectural stack pointer ('esp' on x86, 'sp' on ARM, etc.)
 ```
 
-> - Reading from PC/SP on current arch, defined by ql.arch.type
+The generic aliases may be used to modify the content of their respective registers in a similar manner:
 
 ```python
-ql.arch.regs.arch_pc = 0xFF
-ql.arch.regs.arch_sp = 0xFF
+ql.arch.regs.arch_pc = 0x00400000  # setting the architectural program counter
+ql.arch.regs.arch_sp = 0x7ffff000  # setting the architectural stack pointer
 ```
 
+### Architecture-specific resources
+Some architectures may have their own specific resources which are available in slightly different ways.
 
-### Get register table
-
-- Getting the list of current arch register table
+#### Intel Model Specific Registers (MSR)
+Intel MSR are accessed through `ql.arch.msr`, which has its own `read` and `write` methods. For example:
 
 ```python
-ql.arch.regs.register_mapping()
+IA32_BIOS_SIGN_ID = 0x8b
+
+# read bios signature value
+bios_sig = ql.arch.msr.read(IA32_BIOS_SIGN_ID)
 ```
 
-
-### Get register bit
-
-- This is for architecture that comes with 64bit and 32bit register
-
-> - In 64bit environment this will return 64
-
 ```python
-ql.arch.reg_bits("rax")
+IA32_APIC_BASE_MSR = 0x1b
+apic_base = 0xfee00000
+
+# set apic base while setting BSP and APIC global enable
+ql.arch.msr.write(IA32_APIC_BASE_MSR, apic_base | (0b1 << 8) | (0b1 << 11))
 ```
 
-> - In 64bit environment this will return 32
+#### AArch / AArch64 Coprocessors
+ARM coprocessors are accessed through `ql.arch.cpr` and `ql.arch.cpr64` respectively, with their own `read` and `write` methods. For example:
 
 ```python
-ql.arch.reg_bits("eax")
+from qiling.arch.arm_const import CPACR
+
+# set full access to cp10 and cp11
+cpacr = ql.arch.cpr.read(*CPACR)
+ql.arch.cpr.write(*CPACR, cpacr | (0b11 << 20) | (0b11 << 22))
 ```

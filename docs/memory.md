@@ -2,15 +2,15 @@
 title: Memory
 ---
 
-### Architectural stack operations
+# Architectural stack
 Qiling abstracts the architectural stack operations as follows:
 
-Pop a value off the top of stack:
+Pop a value off the top of stack and adjust stack pointer accordingly:
 ```python
 value = ql.arch.stack_pop()
 ```
 
-Push a value to the top of stack:
+Push a value to the top of stack and adjust stack pointer accordingly:
 ```python
 ql.arch.stack_push(value)
 ```
@@ -28,7 +28,7 @@ ql.arch.stack_write(offset, value)
 ```
 
 # Memory subsystem
-Represents the emulated memory space.
+Represents the emulated memory space. For more methods please refer to [qiling/os/memory.py](https://github.com/qilingframework/qiling/blob/master/qiling/os/memory.py)
 
 ## Managing memory
 Qiling offers several methods for managing the emulated memory space:
@@ -70,7 +70,7 @@ Mapped memory regions may be reclaimed by unmapping them. The `unmap` method rec
 
 Synposys:
 ```python
-ql.mem.unmap(addr: int, size: int) -> None:
+ql.mem.unmap(addr: int, size: int) -> None
 ```
 Arguments:
 - `addr` - region base address to unmap
@@ -81,116 +81,125 @@ Returns: `None`
 Raises: `QlMemoryMappedError` if the requested memory range is not entirely mapped
 
 
+## Accessing Memory
+The following methods may be used to access the emulated memory space:
 
+| Method      | Description
+|:--          | :--
+| `read`      | Read a chunk of data from a specific location in memory
+| `write`     | Write a chunk of data to a specific location in memory
+| `read_ptr`  | A utility function to read an integer value of a certain size from memory
+| `write_ptr` | A utility function to write an integer value of a certain size to memory
 
+Note: only mapped ranges can be accessed. Accessing a non-mapped area will result in an exception.
 
-### Search bytes pattern from memory
-- Search for a pattern from entire memory
+### Reading data
+Mapped memory may be accessed for reading in multiple ways as described below. Note that memory protections (that is, non-readable pages) do not apply to Qiling itself but only to memory accesses performed by the emulated program, therefore all mapped memory is readable by Qiling.
+
+#### Read bytes from memory
+Synposys:
 ```python
-address = ql.mem.search(b"\xFF\xFE\xFD\xFC\xFB\xFA")
+ql.mem.read(addr: int, size: int) -> bytearray
 ```
-- Search for a pattern from entire memory range
+Arguments:
+- `addr` - memory location to read data from; any address is valid as long as it is mapped
+- `size` - number of bytes to read; any size is valid as long as the span area is mapped
+
+Returns: a `bytearray` object containing the memory content
+
+Raises: `UcError` if the requested memory range is not entirely available
+
+#### Read an integer value from a memory address
+Synposys:
 ```python
-address = ql.mem.search(b"\xFF\xFE\xFD\xFC\xFB\xFA", begin= 0x1000, end= 0x2000)
+ql.mem.read_ptr(addr: int, size: int = 0, *, signed = False) -> int
 ```
+Arguments:
+- `addr` - memory address to read from
+- `size` - pointer size (in bytes): either `1`, `2`, `4` or `8`; default is arch native size
+- `signed` - interpret value as a signed integer (default: `False`)
 
-### Read from a memory address
+Returns: integer value stored at the specified memory address
+
+Raises: `UcError` if the requested memory range is not entirely available
+
+### Writing data
+Mapped memory may be accessed for writing in multiple ways as described below. Note that memory protections (that is, non-writeable pages) do not apply to Qiling itself but only to memory accesses performed by the emulated program, therefore all mapped memory is writeable by Qiling.
+
+#### Write bytes to memory
+Synposys:
 ```python
-ql.mem.read(address, size)
+ql.mem.write(addr: int, data: bytes) -> None
 ```
+Arguments:
+- `addr` - memory location to write data to; any address is valid as long as it is mapped
+- `data` - bytes to write; data in any size is valid as long as the span area is mapped
 
-### Write to a memory address
+Returns: `None`
+
+Raises: `UcError` if the requested memory range is not entirely available
+
+#### Write an integer value to a memory address
+Synposys:
 ```python
-ql.mem.write(address, data)
+ql.mem.write_ptr(addr: int, value: int, size: int = 0, *, signed = False) -> None
 ```
+Arguments:
+- `addr`   - target memory address
+- `value`  - integer value to write
+- `size`   - pointer size (in bytes): either `1`, `2`, `4` or `8`; default is arch native size
+- `signed` - interpret value as a signed integer (default: `False`)
 
-### Map a memory area
-map a memory before writing into it. Info can be empty.
+Returns: `None`
+
+Raises: `UcError` if the requested memory range is not entirely available
+
+
+## Searching memory
+Mapped memory may be searched for either a specific bytes sequence or a pattern.
+
+Synposys:
 ```python
-ql.mem.map(addr,size,info = [my_first_map])
+ql.mem.search(needle: Union[bytes, Pattern[bytes]], begin: Optional[int] = None, end: Optional[int] = None) -> List[int]
 ```
+Arguments:
+- `needle` - bytes sequence or regex pattern to look for
+- `begin`  - search starting address; if not specified, start at lowest avaiable address
+- `end`    - search ending address; if not specified, end at highest avaiable address
 
-Address:
+Returns: a list containing the addresses of all matches, or an empty list if there were no findings
 
-You need to align the memory offset and address for mapping.
+Notes: memory ranges mapped as MMIO will be excluded due to potential side effects of the read operations
 
-`addr//size*size` -> `0x7fefc9e0//4096*4096`
+## Utilities
 
-Size:
+### Alignment
+Some methods require the specified base address or size to be aligned on a certain boundary. The following utility methods help achieving that.
 
-The amounts of memory that should be mapped
+#### Align a value
+Align a value down to the specified alignment boundary. If `value` is already aligned, the same value is returned.
+Commonly used to determine the base address of the enclosing page.
 
-> This parameter is OS dependant; If you use a linux system, consider at least a multiple of 4096 for alignment
-
-
-example (Linux):
+Synposys:
 ```python
-[..]
-def memory_fix(ql, access, addr, size, value):
-    ql.nprint("[_] Mapping "+str(size)+" bytes at "+hex(addr)+" | access: "+ str(access)+" | value: "+ str(value))
-    ql.mem.map(addr//4096*4096, 4096)
-    ql.mem.write(addr, struct.pack(">I",value)) # memory packing is OS dependant
-    return 
-
-[...]
-ql.hook_mem_unmapped(memory_fix)
-[...]
+ql.mem.align(value: int, alignment: Optional[int] = None) -> int
 ```
+Arguments:
+- `value`     - a value to align
+- `alignment` - alignment boundary; must be a power of 2. if not specified, value will be aligned to native page size
 
-See **qiling/loader/elf.py** for a proper mapping example
+Returns: value aligned down to boundary
 
-### read and write string
-to read a string from memory
+#### Align a value up
+Align a value up to the specified alignment boundary. If `value` is already aligned, the same value is returned.
+Commonly used to determine the end address of the enlosing page.
+
+Synposys:
 ```python
-ql.mem.string(address)
+ql.mem.align_up(value: int, alignment: Optional[int] = None) -> int
 ```
+Arguments:
+- `value`     - a value to align
+- `alignment` - alignment boundary; must be a power of 2. if not specified, value will be aligned to native page size
 
-to write a string to memory
-```python
-ql.mem.string(address, "stringwith")
-```
-
-### Show all the mapped area
-```python
-ql.mem.get_formatted_mapinfo()
-```
-
-Example:
-```python
-for info_line in self.ql.mem.get_formatted_mapinfo():
-    self.ql.log.error(info_line)
-```
-
-### find a free space
-Find a specific free space size.
-```python
-ql.mem.find_free_space(size)
-```    
-
-### check for availablity
-The main function of is_available is to determine 
-whether the memory starting with addr and having a size of length can be used for allocation.
-If it can be allocated, returns True.
-If it cannot be allocated, it returns False.
-```python
-ql.mem.is_available(addr, size)
-```
-
-### check for is the memory area being mapped
-The main function of is_mmaped is to determine  whether the memory starting with addr and size has been mapped.
-Returns true if it has already been allocated. If unassigned, returns False.
-```python
-ql.mem.is_mapped(addr, size)
-```
-
-### Find a matching size of unmapped usable space
-Finds a region of memory that is free, larger than 'size' arg, and aligned.
-```python
-ql.mem.find_free_space(size, min_addr=0, max_addr = 0, alignment=0x10000)
-```
-
-### Find a matching size of unmapped usable space and map it
-Maps a region of memory with requested size, within the addresses specified. The size and start address will respect the alignment.
-```python
-ql.mem.map_anywhere(size)
-```
+Returns: value aligned up to boundary

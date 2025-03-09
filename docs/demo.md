@@ -2,24 +2,26 @@
 title: Demo
 ---
 
-### Emulating a Windows EXE on a Linux machine.
-
+### Emulating a Windows EXE on a Linux machine
 Using Qiling Framework to emulate a Windows binary on a Linux machine.
 
 Example code
 ```python
-from qiling import *
+from qiling import Qiling
 
-# sandbox to emulate the EXE
-def my_sandbox(path, rootfs):
-    # setup Qiling engine
-    ql = Qiling(path, rootfs)
-    # now emulate the EXE
+
+# a simple emulatation sandbox
+def sandbox(path: str, rootfs: str) -> None:
+    # initialize qiling
+    ql = Qiling([path], rootfs)
+
+    # do the magic!
     ql.run()
 
-if __name__ == "__main__":
+
+if __name__ == '__main__':
     # execute Windows EXE under our rootfs
-    my_sandbox(["examples/rootfs/x86_windows/bin/x86_hello.exe"], "examples/rootfs/x86_windows")
+    sandbox(r'examples/rootfs/x86_windows/bin/x86_hello.exe', r'examples/rootfs/x86_windows')
 ```
 
 
@@ -28,18 +30,21 @@ Emulating Windows registry with Qiling Framework
 
 Example code
 ```python
-import sys
-sys.path.append("..")
-from qiling import *
+from qiling import Qiling
 from qiling.const import QL_VERBOSE
 
-def my_sandbox(path, rootfs):
-    ql = Qiling(path, rootfs, verbose=QL_VERBOSE.DEBUG)
+
+# a simple emulatation sandbox
+def sandbox(path: str, rootfs: str) -> None:
+    # initialize qiling and set it to debug verbosity
+    ql = Qiling([path], rootfs, verbose=QL_VERBOSE.DEBUG)
+
+    # do the magic!
     ql.run()
 
 
-if __name__ == "__main__":
-    my_sandbox(["rootfs/x86_windows/bin/RegDemo.exe"], "rootfs/x86_windows")
+if __name__ == '__main__':
+    sandbox(r'rootfs/x86_windows/bin/RegDemo.exe', r'rootfs/x86_windows')
 ```
 
 Youtube video
@@ -53,18 +58,19 @@ This demo executed wannacry.bin (md5 41b5ba4bf74e65845fa8c9861ca34508) and look 
 
 Example code
 ```python
-import sys
-sys.path.append("..")
-from qiling import *
+from qiling import Qiling
 from qiling.const import QL_VERBOSE
 
-def stopatkillerswtich(ql):
-    print("killerswtch found")
+
+def stop_at_killer_swtich(ql: Qiling) -> None:
+    ql.log.warning('killer switch found, stopping')
     ql.emu_stop()
 
-if __name__ == "__main__":
-    ql = Qiling(["rootfs/x86_windows/bin/wannacry.bin"], "rootfs/x86_windows", verbose=QL_VERBOSE.DEBUG)
-    ql.hook_address(stopatkillerswtich, 0x40819a)
+
+if __name__ == '__main__':
+    ql = Qiling([r'rootfs/x86_windows/bin/wannacry.bin'], r'rootfs/x86_windows', verbose=QL_VERBOSE.DEBUG)
+
+    ql.hook_address(stop_at_killer_swtich, 0x40819a)
     ql.run()
 ```
 
@@ -79,11 +85,12 @@ Using Qiling Framework to dynamically patch a Windows Crackme and making it alwa
 
 Example code
 ```python
-from qiling import *
+from qiling import Qiling
 
-def force_call_dialog_func(ql):
+
+def force_call_dialog_func(ql: Qiling) -> None:
     # get DialogFunc address
-    lpDialogFunc = ql.unpack32(ql.mem.read(ql.arch.regs.esp - 0x8, 4))
+    lpDialogFunc = ql.mem.read_ptr(ql.arch.regs.esp - 0x8, 4)
     # setup stack memory for DialogFunc
 
     ql.stack_push(0)
@@ -91,24 +98,27 @@ def force_call_dialog_func(ql):
     ql.stack_push(273)
     ql.stack_push(0)
     ql.stack_push(0x0401018)
+
     # force EIP to DialogFunc
     ql.arch.regs.eip = lpDialogFunc
 
 
-def my_sandbox(path, rootfs):
+def sandbox(path, rootfs):
     ql = Qiling(path, rootfs)
+
     # NOP out some code
-    ql.patch(0x004010B5, b'\x90\x90')
-    ql.patch(0x004010CD, b'\x90\x90')
-    ql.patch(0x0040110B, b'\x90\x90')
-    ql.patch(0x00401112, b'\x90\x90')
+    ql.patch(0x004010B5, b'\x90' * 2)
+    ql.patch(0x004010CD, b'\x90' * 2)
+    ql.patch(0x0040110B, b'\x90' * 2)
+    ql.patch(0x00401112, b'\x90' * 2)
+
     # hook at an address with a callback
     ql.hook_address(force_call_dialog_func, 0x00401016)
     ql.run()
 
 
-if __name__ == "__main__":
-    my_sandbox(["rootfs/x86_windows/bin/Easy_CrackMe.exe"], "rootfs/x86_windows")
+if __name__ == '__main__':
+    sandbox([r'rootfs/x86_windows/bin/Easy_CrackMe.exe'], r'rootfs/x86_windows')
 ```
 
 Youtube video
